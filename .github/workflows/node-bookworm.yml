@@ -27,7 +27,7 @@ jobs:
           - arch: amd64
             runner: ubuntu-latest
           - arch: arm64
-            runner: ubuntu-latest
+            runner: ubuntu-24.04-arm  # Native ARM64 runner (faster than QEMU)
     runs-on: ${{ matrix.platform.runner }}
     permissions:
       contents: read
@@ -36,10 +36,6 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-
-      - name: Set up QEMU
-        if: matrix.platform.arch == 'arm64'
-        uses: docker/setup-qemu-action@v3
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
