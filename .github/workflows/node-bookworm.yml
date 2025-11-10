@@ -48,17 +48,20 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Check if platform already exists
-        id: check-platform
         if: github.event_name == 'push'
         run: |
           IMAGE_TAG="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.TAG }}"
-          if docker manifest inspect "$IMAGE_TAG" --platform linux/${{ matrix.platform.arch }} >/dev/null 2>&1; then
-            echo "Tag ${{ env.TAG }} already exists for linux/${{ matrix.platform.arch }}, skipping build"
-            echo "should_build=false" >> $GITHUB_OUTPUT
-          else
-            echo "Tag ${{ env.TAG }} missing for linux/${{ matrix.platform.arch }}, will build"
-            echo "should_build=true" >> $GITHUB_OUTPUT
+          PLATFORM="linux/${{ matrix.platform.arch }}"
+          
+          echo "Checking if tag ${{ env.TAG }} exists for platform $PLATFORM..."
+          
+          # If the image already exists, exit successfully
+          if docker manifest inspect "$IMAGE_TAG" --platform "$PLATFORM" >/dev/null 2>&1; then
+            echo "✓ Ok, it's fine - it already exists. Thanks!"
+            exit 0
           fi
+          
+          echo "✗ Tag ${{ env.TAG }} missing for $PLATFORM, proceeding with build..."
 
       - name: Extract metadata (tags, labels) for Docker
         id: meta
@@ -69,7 +72,6 @@ jobs:
             type=raw,value=${{ env.TAG }}
 
       - name: Build and push Docker image
-        if: github.event_name != 'push' || steps.check-platform.outputs.should_build != 'false'
         uses: docker/build-push-action@v5
         with:
           context: ./node
