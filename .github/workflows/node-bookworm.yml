@@ -49,20 +49,28 @@ jobs:
       - name: Check if platform already exists
         id: check
         run: |
-          set -e
           IMAGE_TAG="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.TAG }}"
           PLATFORM="linux/${{ matrix.platform.arch }}"
           
           echo "🔍 Checking if tag ${{ env.TAG }} exists for platform $PLATFORM..."
           echo "Full image reference: $IMAGE_TAG"
           
-          # Check if the manifest exists for this specific platform
-          if docker manifest inspect "$IMAGE_TAG" --platform "$PLATFORM" >/dev/null 2>&1; then
-            echo "✓ Ok, it's fine - it already exists. Thanks!"
+          # First, try to get the manifest list to see if the tag exists at all
+          if ! MANIFEST_OUTPUT=$(docker manifest inspect "$IMAGE_TAG" 2>&1); then
+            echo "⚠ Could not inspect manifest (may not exist or auth issue):"
+            echo "$MANIFEST_OUTPUT" | head -5
+            echo "✗ Tag ${{ env.TAG }} missing or inaccessible, proceeding with build..."
+            echo "exists=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          
+          # Check if the manifest list contains the specific platform
+          if echo "$MANIFEST_OUTPUT" | jq -e ".manifests[]? | select(.platform.architecture == \"${{ matrix.platform.arch }}\" and .platform.os == \"linux\")" >/dev/null 2>&1; then
+            echo "✓ Ok, it's fine - it already exists for $PLATFORM. Thanks!"
             echo "exists=true" >> $GITHUB_OUTPUT
             exit 0
           else
-            echo "✗ Tag ${{ env.TAG }} missing for $PLATFORM, proceeding with build..."
+            echo "✗ Tag ${{ env.TAG }} exists but missing platform $PLATFORM, proceeding with build..."
             echo "exists=false" >> $GITHUB_OUTPUT
           fi
 
