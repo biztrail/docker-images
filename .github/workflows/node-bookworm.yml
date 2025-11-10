@@ -19,8 +19,15 @@ env:
   TAG: 22.21.1-bookworm
 
 jobs:
-  build-and-push:
-    runs-on: ubuntu-latest
+  build:
+    strategy:
+      matrix:
+        platform:
+          - arch: amd64
+            runner: ubuntu-latest
+          - arch: arm64
+            runner: ubuntu-latest
+    runs-on: ${{ matrix.platform.runner }}
     permissions:
       contents: read
       packages: write
@@ -40,39 +47,16 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Check existing platforms and determine what to build
-        id: check-platforms
+      - name: Check if platform already exists
+        id: check-platform
         if: github.event_name == 'push'
         run: |
           IMAGE_TAG="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.TAG }}"
-          PLATFORMS_TO_BUILD=""
-          
-          # Check if amd64 exists
-          if docker manifest inspect "$IMAGE_TAG" --platform linux/amd64 >/dev/null 2>&1; then
-            echo "Tag ${{ env.TAG }} already exists for linux/amd64, skipping..."
-          else
-            echo "Tag ${{ env.TAG }} missing for linux/amd64, will build"
-            PLATFORMS_TO_BUILD="${PLATFORMS_TO_BUILD}linux/amd64,"
-          fi
-          
-          # Check if arm64 exists
-          if docker manifest inspect "$IMAGE_TAG" --platform linux/arm64 >/dev/null 2>&1; then
-            echo "Tag ${{ env.TAG }} already exists for linux/arm64, skipping..."
-          else
-            echo "Tag ${{ env.TAG }} missing for linux/arm64, will build"
-            PLATFORMS_TO_BUILD="${PLATFORMS_TO_BUILD}linux/arm64,"
-          fi
-          
-          # Remove trailing comma if any platforms need building
-          PLATFORMS_TO_BUILD=$(echo "$PLATFORMS_TO_BUILD" | sed 's/,$//')
-          
-          if [ -z "$PLATFORMS_TO_BUILD" ]; then
-            echo "All platforms already exist for tag ${{ env.TAG }}, skipping build"
-            echo "platforms_to_build=" >> $GITHUB_OUTPUT
+          if docker manifest inspect "$IMAGE_TAG" --platform linux/${{ matrix.platform.arch }} >/dev/null 2>&1; then
+            echo "Tag ${{ env.TAG }} already exists for linux/${{ matrix.platform.arch }}, skipping build"
             echo "should_build=false" >> $GITHUB_OUTPUT
           else
-            echo "Will build for platforms: $PLATFORMS_TO_BUILD"
-            echo "platforms_to_build=$PLATFORMS_TO_BUILD" >> $GITHUB_OUTPUT
+            echo "Tag ${{ env.TAG }} missing for linux/${{ matrix.platform.arch }}, will build"
             echo "should_build=true" >> $GITHUB_OUTPUT
           fi
 
@@ -85,15 +69,16 @@ jobs:
             type=raw,value=${{ env.TAG }}
 
       - name: Build and push Docker image
-        if: github.event_name != 'push' || steps.check-platforms.outputs.should_build != 'false'
+        if: github.event_name != 'push' || steps.check-platform.outputs.should_build != 'false'
         uses: docker/build-push-action@v5
         with:
           context: ./node
           file: ./node/Dockerfile
-          platforms: ${{ github.event_name == 'push' && steps.check-platforms.outputs.platforms_to_build != '' && steps.check-platforms.outputs.platforms_to_build || 'linux/amd64,linux/arm64' }}
-          push: ${{ github.event_name == 'push' && steps.check-platforms.outputs.should_build != 'false' }}
+          platforms: linux/${{ matrix.platform.arch }}
+          push: ${{ github.event_name == 'push' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
+          cache-from: type=gha,scope=${{ matrix.platform.arch }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.platform.arch }}
+        env:
+          BUILDKIT_INLINE_CACHE: 1
