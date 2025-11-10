@@ -15,7 +15,7 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: library/node
+  IMAGE_NAME: biztrail/library/node
   TAG: 22.21.1-bookworm
 
 jobs:
