@@ -21,12 +21,13 @@ env:
 jobs:
   build:
     strategy:
+      fail-fast: false
       matrix:
         platform:
           - arch: amd64
             runner: ubuntu-latest
           - arch: arm64
-            runner: ubuntu-latest
+            runner: ubuntu-24.04-arm  # Native ARM64 runner (faster than QEMU)
     runs-on: ${{ matrix.platform.runner }}
     permissions:
       contents: read
@@ -83,17 +84,119 @@ jobs:
           tags: |
             type=raw,value=${{ env.TAG }}
 
-      - name: Build and push Docker image
-        if: steps.check.outputs.exists != 'true'
+      - name: Build and push by digest
+        id: build
+        if: steps.check.outputs.exists != 'true' && github.event_name == 'push'
         uses: docker/build-push-action@v5
         with:
           context: ./node
           file: ./node/Dockerfile
           platforms: linux/${{ matrix.platform.arch }}
-          push: ${{ github.event_name == 'push' }}
-          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          outputs: type=image,push-by-digest=true,name-canonical=true,push=true
+          cache-from: type=gha,scope=${{ matrix.platform.arch }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.platform.arch }}
+        env:
+          BUILDKIT_INLINE_CACHE: 1
+
+      - name: Build Docker image (no push for PRs)
+        if: steps.check.outputs.exists != 'true' && github.event_name != 'push'
+        uses: docker/build-push-action@v5
+        with:
+          context: ./node
+          file: ./node/Dockerfile
+          platforms: linux/${{ matrix.platform.arch }}
+          push: false
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.TAG }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha,scope=${{ matrix.platform.arch }}
           cache-to: type=gha,mode=max,scope=${{ matrix.platform.arch }}
         env:
           BUILDKIT_INLINE_CACHE: 1
+
+      - name: Export digest
+        if: steps.check.outputs.exists != 'true' && github.event_name == 'push'
+        run: |
+          mkdir -p ${{ runner.temp }}/digests
+          digest="${{ steps.build.outputs.digest }}"
+          platform_pair="linux-${{ matrix.platform.arch }}"
+          echo "${digest#sha256:}" > "${{ runner.temp }}/digests/${platform_pair}"
+
+      - name: Upload digest
+        if: steps.check.outputs.exists != 'true' && github.event_name == 'push'
+        uses: actions/upload-artifact@v4
+        with:
+          name: digests-${{ matrix.platform.arch }}
+          path: ${{ runner.temp }}/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  merge:
+    name: Create manifest list
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.event_name == 'push'
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Download digests
+        uses: actions/download-artifact@v4
+        with:
+          path: ${{ runner.temp }}/digests
+          pattern: digests-*
+          merge-multiple: true
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Extract metadata (tags, labels) for Docker
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=${{ env.TAG }}
+
+      - name: Create manifest list and push
+        working-directory: ${{ runner.temp }}/digests
+        run: |
+          IMAGE_TAG="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.TAG }}"
+          
+          # Build the command with all digests
+          DIGEST_ARGS=$(printf '${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@sha256:%s ' $(cat *))
+          
+          echo "🔗 Creating manifest list with digests:"
+          cat *
+          
+          # Create or update manifest list
+          docker buildx imagetools create -t "$IMAGE_TAG" $DIGEST_ARGS
+          
+          echo "✓ Successfully created manifest list for $IMAGE_TAG"
+
+      - name: Inspect image
+        run: |
+          docker buildx imagetools inspect ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.TAG }}
+
+  cleanup:
+    name: Cleanup untagged images
+    runs-on: ubuntu-latest
+    needs: merge
+    if: github.event_name == 'push'
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Delete untagged images
+        uses: dataaxiom/ghcr-cleanup-action@v1
+        with:
+          dry-run: false
+          package-name: ${{ env.IMAGE_NAME }}
+          package-type: container
