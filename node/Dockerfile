@@ -1,4 +1,4 @@
-FROM node:22.21.1-bookworm
+FROM node:22.22.3-bookworm
 
 RUN apt update && \
     apt install -y git curl jq unzip groff less && \
