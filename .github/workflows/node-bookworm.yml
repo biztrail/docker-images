@@ -17,6 +17,7 @@ env:
   REGISTRY: ghcr.io
   IMAGE_NAME: biztrail/library/node
   TAG: 22.23.3-bookworm
+  TAG_MINOR: 22.23-bookworm
 
 jobs:
   build:
@@ -83,6 +84,7 @@ jobs:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
             type=raw,value=${{ env.TAG }}
+            type=raw,value=${{ env.TAG_MINOR }}
 
       - name: Build and push by digest
         id: build
@@ -107,7 +109,9 @@ jobs:
           file: ./node/bookworm/Dockerfile
           platforms: linux/${{ matrix.platform.arch }}
           push: false
-          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.TAG }}
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.TAG }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.TAG_MINOR }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha,scope=bookworm-${{ matrix.platform.arch }}
           cache-to: type=gha,mode=max,scope=bookworm-${{ matrix.platform.arch }}
@@ -164,11 +168,13 @@ jobs:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
             type=raw,value=${{ env.TAG }}
+            type=raw,value=${{ env.TAG_MINOR }}
 
       - name: Create manifest list and push
         working-directory: ${{ runner.temp }}/digests
         run: |
           IMAGE_TAG="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.TAG }}"
+          IMAGE_TAG_MINOR="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.TAG_MINOR }}"
           
           # Build the command with all digests
           DIGEST_ARGS=$(printf '${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@sha256:%s ' $(cat *))
@@ -177,13 +183,14 @@ jobs:
           cat *
           
           # Create or update manifest list
-          docker buildx imagetools create -t "$IMAGE_TAG" $DIGEST_ARGS
+          docker buildx imagetools create -t "$IMAGE_TAG" -t "$IMAGE_TAG_MINOR" $DIGEST_ARGS
           
-          echo "✓ Successfully created manifest list for $IMAGE_TAG"
+          echo "✓ Successfully created manifest list for $IMAGE_TAG and $IMAGE_TAG_MINOR"
 
       - name: Inspect image
         run: |
           docker buildx imagetools inspect ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.TAG }}
+          docker buildx imagetools inspect ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.TAG_MINOR }}
 
   cleanup:
     name: Cleanup untagged images
@@ -197,6 +204,6 @@ jobs:
       - name: Delete untagged images
         uses: dataaxiom/ghcr-cleanup-action@v1
         with:
+          package: library/node
+          delete-untagged: true
           dry-run: false
-          package-name: ${{ env.IMAGE_NAME }}
-          package-type: container

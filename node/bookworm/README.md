@@ -2,6 +2,8 @@
 
 **Latest image**: `ghcr.io/biztrail/library/node:22.23.3-bookworm`
 
+**Minor tag**: `ghcr.io/biztrail/library/node:22.23-bookworm`
+
 **Base image**: `node:22.23.3-bookworm`
 
 ## Installed Packages

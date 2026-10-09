@@ -2,6 +2,8 @@
 
 **Latest image**: `ghcr.io/biztrail/library/node:24.21.0-trixie`
 
+**Minor tag**: `ghcr.io/biztrail/library/node:24.21-trixie`
+
 **Base image**: `node:24.21.0-trixie`
 
 ## Installed Packages
