@@ -1,22 +1,22 @@
-name: Build and Publish Node Bookworm
+name: Build and Publish Node Trixie
 
 on:
   push:
     branches:
       - main
     paths:
-      - 'node/bookworm/**'
-      - '.github/workflows/node-bookworm.yml'
+      - 'node/trixie/**'
+      - '.github/workflows/node-trixie.yml'
   pull_request:
     paths:
-      - 'node/bookworm/**'
-      - '.github/workflows/node-bookworm.yml'
+      - 'node/trixie/**'
+      - '.github/workflows/node-trixie.yml'
   workflow_dispatch:
 
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: biztrail/library/node
-  TAG: 22.23.3-bookworm
+  TAG: 24.21.0-trixie
 
 jobs:
   build:
@@ -89,13 +89,13 @@ jobs:
         if: steps.check.outputs.exists != 'true' && github.event_name == 'push'
         uses: docker/build-push-action@v5
         with:
-          context: ./node/bookworm
-          file: ./node/bookworm/Dockerfile
+          context: ./node/trixie
+          file: ./node/trixie/Dockerfile
           platforms: linux/${{ matrix.platform.arch }}
           labels: ${{ steps.meta.outputs.labels }}
           outputs: type=image,name=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }},push-by-digest=true,name-canonical=true,push=true
-          cache-from: type=gha,scope=bookworm-${{ matrix.platform.arch }}
-          cache-to: type=gha,mode=max,scope=bookworm-${{ matrix.platform.arch }}
+          cache-from: type=gha,scope=trixie-${{ matrix.platform.arch }}
+          cache-to: type=gha,mode=max,scope=trixie-${{ matrix.platform.arch }}
         env:
           BUILDKIT_INLINE_CACHE: 1
 
@@ -103,14 +103,14 @@ jobs:
         if: steps.check.outputs.exists != 'true' && github.event_name != 'push'
         uses: docker/build-push-action@v5
         with:
-          context: ./node/bookworm
-          file: ./node/bookworm/Dockerfile
+          context: ./node/trixie
+          file: ./node/trixie/Dockerfile
           platforms: linux/${{ matrix.platform.arch }}
           push: false
           tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.TAG }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha,scope=bookworm-${{ matrix.platform.arch }}
-          cache-to: type=gha,mode=max,scope=bookworm-${{ matrix.platform.arch }}
+          cache-from: type=gha,scope=trixie-${{ matrix.platform.arch }}
+          cache-to: type=gha,mode=max,scope=trixie-${{ matrix.platform.arch }}
         env:
           BUILDKIT_INLINE_CACHE: 1
 
@@ -126,7 +126,7 @@ jobs:
         if: steps.check.outputs.exists != 'true' && github.event_name == 'push'
         uses: actions/upload-artifact@v4
         with:
-          name: digests-bookworm-${{ matrix.platform.arch }}
+          name: digests-trixie-${{ matrix.platform.arch }}
           path: ${{ runner.temp }}/digests/*
           if-no-files-found: error
           retention-days: 1
@@ -144,7 +144,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           path: ${{ runner.temp }}/digests
-          pattern: digests-bookworm-*
+          pattern: digests-trixie-*
           merge-multiple: true
 
       - name: Log in to GitHub Container Registry

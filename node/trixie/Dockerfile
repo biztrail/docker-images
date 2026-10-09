@@ -1,4 +1,4 @@
-FROM node:22.22.3-bookworm
+FROM node:24.21.0-trixie
 
 RUN apt update && \
     apt install -y git curl jq unzip groff less && \
@@ -7,4 +7,3 @@ RUN apt update && \
 WORKDIR /app
 
 CMD ["node"]
-
