@@ -52,6 +52,7 @@ jobs:
         id: check
         run: |
           IMAGE_TAG="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.TAG }}"
+          IMAGE_TAG_MINOR="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.TAG_MINOR }}"
           PLATFORM="linux/${{ matrix.platform.arch }}"
           
           echo "🔍 Checking if tag ${{ env.TAG }} exists for platform $PLATFORM..."
@@ -62,6 +63,12 @@ jobs:
             echo "⚠ Could not inspect manifest (may not exist or auth issue):"
             echo "$MANIFEST_OUTPUT" | head -5
             echo "✗ Tag ${{ env.TAG }} missing or inaccessible, proceeding with build..."
+            echo "exists=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          if ! docker manifest inspect "$IMAGE_TAG_MINOR" >/dev/null 2>&1; then
+            echo "✗ Tag ${{ env.TAG_MINOR }} missing, proceeding with build..."
             echo "exists=false" >> $GITHUB_OUTPUT
             exit 0
           fi
