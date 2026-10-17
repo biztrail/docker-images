@@ -10,3 +10,5 @@ This repository contains Docker images used for building various projects. They 
 - [Node.js 24.21.0 on Debian Trixie](./node/trixie/README.md)
   - Image: `ghcr.io/biztrail/library/node:24.21.0-trixie`
   - Minor tag: `ghcr.io/biztrail/library/node:24.21-trixie`
+- [Playwright e2e runner (Python)](./e2e/playwright-python/README.md)
+  - Image: `ghcr.io/biztrail/library/e2e-runner-playwright-python:1.64.0`
