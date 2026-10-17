@@ -46,8 +46,12 @@ RUN apt-get update \
 
 # Docker Compose sends oomScoreAdj 0. Nested Podman cannot write
 # /proc/self/oom_score_adj, so crun must drop the field before create.
-RUN mv /usr/bin/crun /usr/bin/crun.real \
-    && cat > /usr/bin/crun <<'EOF'
+# One heredoc for the whole RUN: a <<'EOF' inside a continued shell RUN
+# ends the Dockerfile instruction at the first terminator.
+RUN <<'EOF'
+set -eu
+mv /usr/bin/crun /usr/bin/crun.real
+cat > /usr/bin/crun <<'SCRIPT'
 #!/bin/sh
 bundle=""
 prev=""
@@ -61,15 +65,16 @@ if [ -n "$bundle" ] && [ -f "$bundle/config.json" ] && command -v node >/dev/nul
   node -e 'const fs=require("fs"); const p=process.argv[1]; const spec=JSON.parse(fs.readFileSync(p,"utf8")); if (spec.process) delete spec.process.oomScoreAdj; fs.writeFileSync(p, JSON.stringify(spec));' "$bundle/config.json" || true
 fi
 exec /usr/bin/crun.real "$@"
-EOF
-    && chmod 755 /usr/bin/crun \
-    && mkdir -p /etc/containers/containers.conf.d /usr/local/bin \
-    && cat > /etc/containers/containers.conf.d/99-e2e.conf <<'EOF'
+SCRIPT
+chmod 755 /usr/bin/crun
+mkdir -p /etc/containers/containers.conf.d /usr/local/bin
+cat > /etc/containers/containers.conf.d/99-e2e.conf <<'CONF'
 [engine]
 cgroup_manager = "cgroupfs"
 events_logger = "file"
+CONF
+ln -sfn /usr/libexec/docker/cli-plugins/docker-compose /usr/local/bin/docker-compose
 EOF
-    && ln -sfn /usr/libexec/docker/cli-plugins/docker-compose /usr/local/bin/docker-compose
 
 # Same pin as apps/frontend/firestore-rules-tests. The rules deploy loads
 # google-auth-library from this global install.
